@@ -47,10 +47,10 @@ def call() {
                 cleanWs()
             }
             failure {
-                echo "❌ Restricted or prohibited licenses found. Build failed."
+                echo " Restricted or prohibited licenses found. Build failed."
             }
             success {
-                echo "✅ No prohibited licenses found. Build passed."
+                echo " No prohibited licenses found. Build passed."
             }
         }
     }

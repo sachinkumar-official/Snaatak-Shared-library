@@ -1,0 +1,1 @@
+# Snaatak-Shared-library

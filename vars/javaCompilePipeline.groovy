@@ -3,7 +3,7 @@ def call(Map cfg = [:]) {
     gitBranch      : 'main',
     gitRepo        : 'https://github.com/OT-MICROSERVICES/salary-api.git',
     emailTo        : 'chaudhary2000sachin@gmail.com',
-    mvnTool        : 'Maven3',   // Maven tool name from Jenkins Global Tool Configuration
+    mvnTool        : 'Maven3',   // Must exist in Jenkins Global Tool Config
     mvnCmd         : 'clean compile',
     timeoutMinutes : 30
   ] + (cfg ?: [:])
@@ -12,7 +12,7 @@ def call(Map cfg = [:]) {
     agent any
 
     tools {
-      maven "${d.mvnTool}"   // Ensure Maven is installed in Jenkins
+      maven "${d.mvnTool}"
     }
 
     options {

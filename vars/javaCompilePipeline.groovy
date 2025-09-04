@@ -3,12 +3,17 @@ def call(Map cfg = [:]) {
     gitBranch      : 'main',
     gitRepo        : 'https://github.com/OT-MICROSERVICES/salary-api.git',
     emailTo        : 'chaudhary2000sachin@gmail.com',
-    mvnCmd         : 'mvn -B -ntp clean compile',
+    mvnTool        : 'Maven3',   // Maven tool name from Jenkins Global Tool Configuration
+    mvnCmd         : 'clean compile',
     timeoutMinutes : 30
   ] + (cfg ?: [:])
 
   pipeline {
     agent any
+
+    tools {
+      maven "${d.mvnTool}"   // Ensure Maven is installed in Jenkins
+    }
 
     options {
       timestamps()
@@ -43,7 +48,7 @@ def call(Map cfg = [:]) {
       stage('Build') {
         steps {
           ansiColor('xterm') {
-            sh "${env.MVN_CMD}"
+            sh "mvn -B -ntp ${env.MVN_CMD}"
           }
         }
       }
@@ -55,8 +60,11 @@ def call(Map cfg = [:]) {
           if (env.EMAIL_TO?.trim()) {
             emailext(
               to: env.EMAIL_TO,
-              subject: "SUCCESS: ${env.JOB_NAME} #${env.BUILD_NUMBER}",
-              body: "The build succeeded! Logs: ${env.BUILD_URL}"
+              subject: "✅ SUCCESS: ${env.JOB_NAME} #${env.BUILD_NUMBER}",
+              body: """The build succeeded! 🎉  
+Job: ${env.JOB_NAME}  
+Build: #${env.BUILD_NUMBER}  
+Logs: ${env.BUILD_URL}"""
             )
           }
         }
@@ -66,8 +74,11 @@ def call(Map cfg = [:]) {
           if (env.EMAIL_TO?.trim()) {
             emailext(
               to: env.EMAIL_TO,
-              subject: "FAILED: ${env.JOB_NAME} #${env.BUILD_NUMBER}",
-              body: "The build failed! Logs: ${env.BUILD_URL}"
+              subject: "❌ FAILED: ${env.JOB_NAME} #${env.BUILD_NUMBER}",
+              body: """The build failed 💥  
+Job: ${env.JOB_NAME}  
+Build: #${env.BUILD_NUMBER}  
+Logs: ${env.BUILD_URL}"""
             )
           }
         }

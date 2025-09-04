@@ -31,6 +31,7 @@ def call(Map cfg = [:]) {
       GIT_REPO      = "${params.GIT_REPO}"
       EMAIL_TO      = "${params.EMAIL_TO}"
       SLACK_CHANNEL = "${params.SLACK_CHANNEL}"
+      MVN_CMD       = "${d.mvnCmd}"
     }
 
     stages {
@@ -44,8 +45,8 @@ def call(Map cfg = [:]) {
 
       stage('Build') {
         steps {
-          wrap([$class: 'AnsiColorBuildWrapper', 'colorMapName': 'xterm']) {
-            sh d.mvnCmd
+          ansiColor('xterm') {
+            sh "${env.MVN_CMD}"
           }
         }
       }
@@ -64,6 +65,7 @@ def call(Map cfg = [:]) {
           if (env.SLACK_CHANNEL?.trim()) {
             slackSend(
               channel: env.SLACK_CHANNEL,
+              color: 'good',
               message: "SUCCESS: ${env.JOB_NAME} #${env.BUILD_NUMBER} (${env.BUILD_URL})"
             )
           }
@@ -81,6 +83,7 @@ def call(Map cfg = [:]) {
           if (env.SLACK_CHANNEL?.trim()) {
             slackSend(
               channel: env.SLACK_CHANNEL,
+              color: 'danger',
               message: "FAILED: ${env.JOB_NAME} #${env.BUILD_NUMBER} (${env.BUILD_URL})"
             )
           }

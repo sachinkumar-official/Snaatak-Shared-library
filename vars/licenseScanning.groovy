@@ -4,11 +4,12 @@ def call(Map config = [:]) {
         nodeVersion: "Node18",
         credentialId: 'snyk-auth-token',
         gitUrl: 'https://github.com/OT-MICROSERVICES/employee-api.git',
-        gitBranch: 'main',
+        gitBranch: 'main',  // Default to main branch
         snykArgs: '--license --json',
-        reportFile: 'snyk-licenses.json'
+        reportFile: 'snyk-licenses.json',
+        fallbackBranch: 'main'  // Fallback if specified branch doesn't exist
     ]
-    config = defaults + config  // Merge with user-provided config
+    config = defaults + config
 
     pipeline {
         agent any
@@ -20,7 +21,15 @@ def call(Map config = [:]) {
         stages {
             stage('Checkout Code') {
                 steps {
-                    git branch: config.gitBranch, url: config.gitUrl
+                    script {
+                        // Try to checkout specified branch, fallback to main if it doesn't exist
+                        try {
+                            git branch: config.gitBranch, url: config.gitUrl
+                        } catch (Exception e) {
+                            echo "Branch ${config.gitBranch} not found, falling back to ${config.fallbackBranch}"
+                            git branch: config.fallbackBranch, url: config.gitUrl
+                        }
+                    }
                 }
             }
 

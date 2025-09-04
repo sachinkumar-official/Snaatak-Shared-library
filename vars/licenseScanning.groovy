@@ -1,19 +1,26 @@
-def call() {
+def call(Map config = [:]) {
+    // Default configuration
+    def defaults = [
+        nodeVersion: "Node18",
+        credentialId: 'snyk-auth-token',
+        gitUrl: 'https://github.com/OT-MICROSERVICES/employee-api.git',
+        gitBranch: 'main',
+        snykArgs: '--license --json',
+        reportFile: 'snyk-licenses.json'
+    ]
+    config = defaults + config  // Merge with user-provided config
+
     pipeline {
         agent any
 
         tools {
-            nodejs "Node18"   // Ensure Node18 is configured in Jenkins
-        }
-
-        environment {
-            SNYK_TOKEN = credentials('snyk-auth-token')   // Jenkins credential ID
+            nodejs config.nodeVersion
         }
 
         stages {
             stage('Checkout Code') {
                 steps {
-                    git branch: 'main', url: 'https://github.com/OT-MICROSERVICES/employee-api.git'
+                    git branch: config.gitBranch, url: config.gitUrl
                 }
             }
 
@@ -25,19 +32,18 @@ def call() {
 
             stage('Authenticate & License Scanning') {
                 steps {
-                    withCredentials([string(credentialsId: 'snyk-auth-token', variable: 'SNYK_TOKEN')]) {
-                        sh '''
-                            snyk auth $SNYK_TOKEN
-                            # Save report to file (even if exit code != 0)
-                            snyk test --license --json > snyk-licenses.json || true
-                        '''
+                    withCredentials([string(credentialsId: config.credentialId, variable: 'SNYK_TOKEN')]) {
+                        sh """
+                            snyk auth \${SNYK_TOKEN}
+                            snyk test ${config.snykArgs} > ${config.reportFile} || true
+                        """
                     }
                 }
             }
 
             stage('Archive Reports') {
                 steps {
-                    archiveArtifacts artifacts: 'snyk-licenses.json', fingerprint: true
+                    archiveArtifacts artifacts: config.reportFile, fingerprint: true
                 }
             }
         }
@@ -47,10 +53,10 @@ def call() {
                 cleanWs()
             }
             failure {
-                echo " Restricted or prohibited licenses found. Build failed."
+                echo "Restricted or prohibited licenses found. Build failed."
             }
             success {
-                echo " No prohibited licenses found. Build passed."
+                echo "No prohibited licenses found. Build passed."
             }
         }
     }

@@ -2,6 +2,7 @@ def call(Map config) {
     node {
         def DEFAULT_SONAR_URL = 'http://43.205.114.58:9000'
         def DEFAULT_EMAIL_TO = 'chaudhary2000sachin@gmail.com'
+        def DEFAULT_SONAR_SERVER = 'sonarqube' // Default SonarQube server name
         
         // Merge config with defaults
         def params = [
@@ -14,7 +15,8 @@ def call(Map config) {
             repoUrl: config.repoUrl ?: 'https://github.com/OT-MICROSERVICES/employee-api.git',
             repoBranch: config.repoBranch ?: 'main',
             targetDir: config.targetDir ?: 'employee-api',
-            gitCredentialsId: config.gitCredentialsId ?: '' // Optional Git credentials
+            gitCredentialsId: config.gitCredentialsId ?: '', // Optional Git credentials
+            sonarServerName: config.sonarServerName ?: DEFAULT_SONAR_SERVER // Configurable server name
         ]
 
         def currentStage = ''
@@ -46,10 +48,10 @@ def call(Map config) {
             // Stage 3: SonarQube Analysis
             currentStage = 'SonarQube Analysis'
             stage(currentStage) {
-                echo "Running SonarQube analysis..."
+                echo "Running SonarQube analysis with server: ${params.sonarServerName}"
                 // Use the dir step to ensure we're in the right directory
                 dir(params.targetDir) {
-                    withSonarQubeEnv('sonarqube') {
+                    withSonarQubeEnv(params.sonarServerName) {
                         withCredentials([string(credentialsId: params.credentialsId, variable: 'SONAR_TOKEN')]) {
                             def scannerHome = tool params.scannerTool
                             sh """

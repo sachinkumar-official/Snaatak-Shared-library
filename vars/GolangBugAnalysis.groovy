@@ -13,7 +13,8 @@ def call(Map config) {
             scannerTool: config.scannerTool ?: 'sonar-scanner',
             repoUrl: config.repoUrl ?: 'https://github.com/OT-MICROSERVICES/employee-api.git',
             repoBranch: config.repoBranch ?: 'main',
-            targetDir: config.targetDir ?: 'employee-api'
+            targetDir: config.targetDir ?: 'employee-api',
+            gitCredentialsId: config.gitCredentialsId ?: '' // Optional Git credentials
         ]
 
         def currentStage = ''
@@ -21,17 +22,22 @@ def call(Map config) {
         try {
             // Stage 1: Clean Workspace
             currentStage = 'Clean Workspace'
-            stage(currentStage) { cleanWs() }
+            stage(currentStage) { 
+                echo "Cleaning workspace..."
+                cleanWs() 
+            }
 
             // Stage 2: Checkout Code
             currentStage = 'Checkout Code'
             stage(currentStage) {
-                gitCheckout(params.targetDir, params.repoUrl, params.repoBranch)
+                echo "Checking out code from ${params.repoUrl}..."
+                gitCheckout(params.targetDir, params.repoUrl, params.repoBranch, params.gitCredentialsId)
             }
 
             // Stage 3: SonarQube Analysis
             currentStage = 'SonarQube Analysis'
             stage(currentStage) {
+                echo "Running SonarQube analysis..."
                 sonarScan(
                     params.sonarUrl,
                     params.credentialsId,
@@ -44,6 +50,7 @@ def call(Map config) {
             // Stage 4: Success Notification
             currentStage = 'Send Success Email'
             stage(currentStage) {
+                echo "Sending success email..."
                 sendSuccessEmail(
                     params.emailTo,
                     params.sonarUrl,
@@ -55,12 +62,14 @@ def call(Map config) {
             }
 
         } catch (Exception err) {
+            echo "ERROR: Build failed at stage '${currentStage}': ${err.message}"
             sendFailureEmail(
                 params.emailTo,
                 env.JOB_NAME,
                 env.BUILD_NUMBER,
                 currentStage,
-                env.BUILD_URL
+                env.BUILD_URL,
+                err.message
             )
             error "Build failed at stage: ${currentStage}"
         }
@@ -68,9 +77,15 @@ def call(Map config) {
 }
 
 // Helper Methods
-def gitCheckout(String dir, String url, String branch) {
+def gitCheckout(String dir, String url, String branch, String credentialsId = '') {
     dir(dir) {
-        git branch: branch, url: url
+        if (credentialsId) {
+            // Use credentials if provided
+            git branch: branch, url: url, credentialsId: credentialsId
+        } else {
+            // Use without credentials
+            git branch: branch, url: url
+        }
     }
 }
 
@@ -85,7 +100,7 @@ def sonarScan(String url, String credsId, String tool, String key, String name) 
                   -Dsonar.sources=. \
                   -Dsonar.sourceEncoding=UTF-8 \
                   -Dsonar.host.url=${url} \
-                  -Dsonar.login=${SONAR_TOKEN}
+                  -Dsonar.login=\${SONAR_TOKEN}
             """
         }
     }
@@ -109,7 +124,7 @@ Report: ${reportUrl}
 }
 
 def sendFailureEmail(String emailTo, String jobName, String buildNumber, 
-                    String failedStage, String buildUrl) {
+                    String failedStage, String buildUrl, String errorMsg = '') {
     def trigger = getTrigger()
     def body = """
 SonarQube Analysis FAILED
@@ -118,6 +133,7 @@ Job: ${jobName}
 Build #: ${buildNumber}
 Triggered by: ${trigger}
 Failed at: ${failedStage}
+Error: ${errorMsg}
 Logs: ${buildUrl}
 """
     mail(to: emailTo, subject: "FAILURE: ${jobName} #${buildNumber}", body: body)

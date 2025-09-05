@@ -1,6 +1,6 @@
 def call(Map config) {
     node {
-        def DEFAULT_SONAR_URL = 'http://13.53.121.108:9000'
+        def DEFAULT_SONAR_URL = 'http://43.205.114.58:9000'
         def DEFAULT_EMAIL_TO = 'chaudhary2000sachin@gmail.com'
         
         // Merge config with defaults

@@ -10,7 +10,7 @@ def call(Map config) {
             emailTo: config.emailTo ?: DEFAULT_EMAIL_TO,
             projectKey: config.projectKey ?: 'Bug_Analysis_employee_api',
             projectName: config.projectName ?: 'Golang CI Bug Analysis',
-            credentialsId: config.credentialsId ?: 'sonar-token',
+            sonarToken: config.sonarToken ?: '', // Direct token parameter
             scannerTool: config.scannerTool ?: 'sonar-scanner',
             repoUrl: config.repoUrl ?: 'https://github.com/OT-MICROSERVICES/employee-api.git',
             repoBranch: config.repoBranch ?: 'main',
@@ -49,26 +49,23 @@ def call(Map config) {
             stage(currentStage) {
                 echo "Running SonarQube analysis with server: ${params.sonarServerName}"
                 
-                // Check if credentials exist before proceeding
-                def credentialsExist = checkCredentialsExist(params.credentialsId)
-                if (!credentialsExist) {
-                    error "Credentials '${params.credentialsId}' not found. Please configure them in Jenkins."
+                // Validate that we have a token
+                if (!params.sonarToken) {
+                    error "SonarQube token is required. Please provide it via the sonarToken parameter."
                 }
                 
                 dir(params.targetDir) {
                     withSonarQubeEnv(params.sonarServerName) {
-                        withCredentials([string(credentialsId: params.credentialsId, variable: 'SONAR_TOKEN')]) {
-                            def scannerHome = tool params.scannerTool
-                            sh """
-                                ${scannerHome}/bin/sonar-scanner \
-                                  -Dsonar.projectKey=${params.projectKey} \
-                                  -Dsonar.projectName="${params.projectName}" \
-                                  -Dsonar.sources=. \
-                                  -Dsonar.sourceEncoding=UTF-8 \
-                                  -Dsonar.host.url=${params.sonarUrl} \
-                                  -Dsonar.login=\${SONAR_TOKEN}
-                            """
-                        }
+                        def scannerHome = tool params.scannerTool
+                        sh """
+                            ${scannerHome}/bin/sonar-scanner \
+                              -Dsonar.projectKey=${params.projectKey} \
+                              -Dsonar.projectName="${params.projectName}" \
+                              -Dsonar.sources=. \
+                              -Dsonar.sourceEncoding=UTF-8 \
+                              -Dsonar.host.url=${params.sonarUrl} \
+                              -Dsonar.login=${params.sonarToken}
+                        """
                     }
                 }
             }
@@ -112,18 +109,6 @@ Logs: ${env.BUILD_URL}
                  body: body)
             error "Build failed at stage: ${currentStage}"
         }
-    }
-}
-
-// Helper method to check if credentials exist
-def checkCredentialsExist(String credentialsId) {
-    try {
-        // Try to access the credentials to see if they exist
-        withCredentials([string(credentialsId: credentialsId, variable: 'TEST_TOKEN')]) {
-            return true
-        }
-    } catch (Exception e) {
-        return false
     }
 }
 

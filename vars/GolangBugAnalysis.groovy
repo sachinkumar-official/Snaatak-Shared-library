@@ -31,114 +31,84 @@ def call(Map config) {
             currentStage = 'Checkout Code'
             stage(currentStage) {
                 echo "Checking out code from ${params.repoUrl}..."
-                gitCheckout(params.targetDir, params.repoUrl, params.repoBranch, params.gitCredentialsId)
+                // Use the dir step directly instead of the helper method
+                dir(params.targetDir) {
+                    if (params.gitCredentialsId) {
+                        git branch: params.repoBranch, 
+                             url: params.repoUrl, 
+                             credentialsId: params.gitCredentialsId
+                    } else {
+                        git branch: params.repoBranch, url: params.repoUrl
+                    }
+                }
             }
 
             // Stage 3: SonarQube Analysis
             currentStage = 'SonarQube Analysis'
             stage(currentStage) {
                 echo "Running SonarQube analysis..."
-                sonarScan(
-                    params.sonarUrl,
-                    params.credentialsId,
-                    params.scannerTool,
-                    params.projectKey,
-                    params.projectName
-                )
+                // Use the dir step to ensure we're in the right directory
+                dir(params.targetDir) {
+                    withSonarQubeEnv('sonarqube') {
+                        withCredentials([string(credentialsId: params.credentialsId, variable: 'SONAR_TOKEN')]) {
+                            def scannerHome = tool params.scannerTool
+                            sh """
+                                ${scannerHome}/bin/sonar-scanner \
+                                  -Dsonar.projectKey=${params.projectKey} \
+                                  -Dsonar.projectName="${params.projectName}" \
+                                  -Dsonar.sources=. \
+                                  -Dsonar.sourceEncoding=UTF-8 \
+                                  -Dsonar.host.url=${params.sonarUrl} \
+                                  -Dsonar.login=\${SONAR_TOKEN}
+                            """
+                        }
+                    }
+                }
             }
 
             // Stage 4: Success Notification
             currentStage = 'Send Success Email'
             stage(currentStage) {
                 echo "Sending success email..."
-                sendSuccessEmail(
-                    params.emailTo,
-                    params.sonarUrl,
-                    params.projectKey,
-                    env.JOB_NAME,
-                    env.BUILD_NUMBER,
-                    env.BUILD_URL
-                )
+                def reportUrl = "${params.sonarUrl}/dashboard?id=${params.projectKey}"
+                def trigger = getTrigger()
+                def body = """
+SonarQube Analysis Completed 
+
+Job: ${env.JOB_NAME}
+Build #: ${env.BUILD_NUMBER}
+Triggered by: ${trigger}
+Job URL: ${env.BUILD_URL}
+
+Report: ${reportUrl}
+"""
+                mail(to: params.emailTo, 
+                     subject: "SUCCESS: ${env.JOB_NAME} #${env.BUILD_NUMBER}", 
+                     body: body)
             }
 
         } catch (Exception err) {
             echo "ERROR: Build failed at stage '${currentStage}': ${err.message}"
-            sendFailureEmail(
-                params.emailTo,
-                env.JOB_NAME,
-                env.BUILD_NUMBER,
-                currentStage,
-                env.BUILD_URL,
-                err.message
-            )
+            def trigger = getTrigger()
+            def body = """
+SonarQube Analysis FAILED
+
+Job: ${env.JOB_NAME}
+Build #: ${env.BUILD_NUMBER}
+Triggered by: ${trigger}
+Failed at: ${currentStage}
+Error: ${err.message}
+Logs: ${env.BUILD_URL}
+"""
+            mail(to: params.emailTo, 
+                 subject: "FAILURE: ${env.JOB_NAME} #${env.BUILD_NUMBER}", 
+                 body: body)
             error "Build failed at stage: ${currentStage}"
         }
     }
 }
 
-// Helper Methods
-def gitCheckout(String dir, String url, String branch, String credentialsId = '') {
-    dir(dir) {
-        if (credentialsId) {
-            // Use credentials if provided
-            git branch: branch, url: url, credentialsId: credentialsId
-        } else {
-            // Use without credentials
-            git branch: branch, url: url
-        }
-    }
-}
-
-def sonarScan(String url, String credsId, String tool, String key, String name) {
-    withSonarQubeEnv('sonarqube') {
-        withCredentials([string(credentialsId: credsId, variable: 'SONAR_TOKEN')]) {
-            def scannerHome = tool tool
-            sh """
-                ${scannerHome}/bin/sonar-scanner \
-                  -Dsonar.projectKey=${key} \
-                  -Dsonar.projectName="${name}" \
-                  -Dsonar.sources=. \
-                  -Dsonar.sourceEncoding=UTF-8 \
-                  -Dsonar.host.url=${url} \
-                  -Dsonar.login=\${SONAR_TOKEN}
-            """
-        }
-    }
-}
-
-def sendSuccessEmail(String emailTo, String sonarUrl, String projectKey, 
-                    String jobName, String buildNumber, String buildUrl) {
-    def reportUrl = "${sonarUrl}/dashboard?id=${projectKey}"
-    def trigger = getTrigger()
-    def body = """
-SonarQube Analysis Completed 
-
-Job: ${jobName}
-Build #: ${buildNumber}
-Triggered by: ${trigger}
-Job URL: ${buildUrl}
-
-Report: ${reportUrl}
-"""
-    mail(to: emailTo, subject: "SUCCESS: ${jobName} #${buildNumber}", body: body)
-}
-
-def sendFailureEmail(String emailTo, String jobName, String buildNumber, 
-                    String failedStage, String buildUrl, String errorMsg = '') {
-    def trigger = getTrigger()
-    def body = """
-SonarQube Analysis FAILED
-
-Job: ${jobName}
-Build #: ${buildNumber}
-Triggered by: ${trigger}
-Failed at: ${failedStage}
-Error: ${errorMsg}
-Logs: ${buildUrl}
-"""
-    mail(to: emailTo, subject: "FAILURE: ${jobName} #${buildNumber}", body: body)
-}
-
+// Helper method to get trigger information
 def getTrigger() {
     def cause = currentBuild.getBuildCauses('hudson.model.Cause$UserIdCause')?.getAt(0)
     return cause ? cause.userName : 'Auto-triggered'

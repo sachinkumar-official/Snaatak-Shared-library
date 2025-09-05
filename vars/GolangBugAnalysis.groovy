@@ -2,7 +2,7 @@ def call(Map config) {
     node {
         def DEFAULT_SONAR_URL = 'http://43.205.114.58:9000'
         def DEFAULT_EMAIL_TO = 'chaudhary2000sachin@gmail.com'
-        def DEFAULT_SONAR_SERVER = 'sonarqube' // Default SonarQube server name
+        def DEFAULT_SONAR_SERVER = 'sonarqube'
         
         // Merge config with defaults
         def params = [
@@ -15,8 +15,8 @@ def call(Map config) {
             repoUrl: config.repoUrl ?: 'https://github.com/OT-MICROSERVICES/employee-api.git',
             repoBranch: config.repoBranch ?: 'main',
             targetDir: config.targetDir ?: 'employee-api',
-            gitCredentialsId: config.gitCredentialsId ?: '', // Optional Git credentials
-            sonarServerName: config.sonarServerName ?: DEFAULT_SONAR_SERVER // Configurable server name
+            gitCredentialsId: config.gitCredentialsId ?: '',
+            sonarServerName: config.sonarServerName ?: DEFAULT_SONAR_SERVER
         ]
 
         def currentStage = ''
@@ -33,7 +33,6 @@ def call(Map config) {
             currentStage = 'Checkout Code'
             stage(currentStage) {
                 echo "Checking out code from ${params.repoUrl}..."
-                // Use the dir step directly instead of the helper method
                 dir(params.targetDir) {
                     if (params.gitCredentialsId) {
                         git branch: params.repoBranch, 
@@ -49,7 +48,13 @@ def call(Map config) {
             currentStage = 'SonarQube Analysis'
             stage(currentStage) {
                 echo "Running SonarQube analysis with server: ${params.sonarServerName}"
-                // Use the dir step to ensure we're in the right directory
+                
+                // Check if credentials exist before proceeding
+                def credentialsExist = checkCredentialsExist(params.credentialsId)
+                if (!credentialsExist) {
+                    error "Credentials '${params.credentialsId}' not found. Please configure them in Jenkins."
+                }
+                
                 dir(params.targetDir) {
                     withSonarQubeEnv(params.sonarServerName) {
                         withCredentials([string(credentialsId: params.credentialsId, variable: 'SONAR_TOKEN')]) {
@@ -107,6 +112,18 @@ Logs: ${env.BUILD_URL}
                  body: body)
             error "Build failed at stage: ${currentStage}"
         }
+    }
+}
+
+// Helper method to check if credentials exist
+def checkCredentialsExist(String credentialsId) {
+    try {
+        // Try to access the credentials to see if they exist
+        withCredentials([string(credentialsId: credentialsId, variable: 'TEST_TOKEN')]) {
+            return true
+        }
+    } catch (Exception e) {
+        return false
     }
 }
 
